@@ -1,0 +1,9 @@
+[build]
+  base = "admin-panel"
+  publish = "out"
+  command = "npm install && npm run build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+  [plugins.inputs]
+    onBuild = false # Disable if it interferes with static export
