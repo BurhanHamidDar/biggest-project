@@ -1,9 +1,11 @@
-const https = require('https');
+const { Expo } = require('expo-server-sdk');
 
-const EXPO_API_URL = 'https://exp.host/--/api/v2/push/send';
+// Create a new Expo SDK client
+// optionally providing an access token if you have enabled push security
+const expo = new Expo();
 
 /**
- * Send Push Notifications to multiple tokens (Automatic Chunking)
+ * Send Push Notifications to multiple tokens
  * @param {string[]} tokens - Array of Expo Push Tokens
  * @param {string} title 
  * @param {string} body 
@@ -13,90 +15,42 @@ exports.sendPushList = async (tokens, title, body, data = {}) => {
     if (!tokens || tokens.length === 0) return;
 
     // Filter valid tokens
-    const validTokens = tokens.filter(t => t.startsWith('ExponentPushToken') || t.startsWith('ExpoPushToken'));
+    const validTokens = tokens.filter(t => Expo.isExpoPushToken(t));
     if (validTokens.length === 0) return;
 
-    // Chunking (Expo limit: 100 per request)
-    const CHUNK_SIZE = 100;
-    const chunks = [];
-    for (let i = 0; i < validTokens.length; i += CHUNK_SIZE) {
-        chunks.push(validTokens.slice(i, i + CHUNK_SIZE));
+    // Construct messages
+    const messages = [];
+    for (let pushToken of validTokens) {
+        messages.push({
+            to: pushToken,
+            sound: 'default',
+            title: title,
+            body: body,
+            data: data,
+        });
     }
 
-    const messages = chunks.map(chunk => ({
-        to: chunk,
-        sound: 'default',
-        title,
-        body,
-        data,
-    }));
+    // Batch messages (Expo handles chunking internally, but SDK helper is good)
+    const chunks = expo.chunkPushNotifications(messages);
+    const tickets = [];
 
-    // Send requests in parallel or sequence? Parallel is faster.
-    const promises = messages.map(msg => sendToExpo(msg));
-
-    try {
-        await Promise.all(promises);
-        console.log(`Sent notifications to ${validTokens.length} devices.`);
-    } catch (error) {
-        console.error('Expo Push Error:', error);
+    for (let chunk of chunks) {
+        try {
+            const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+            tickets.push(...ticketChunk);
+        } catch (error) {
+            console.error('Expo Push Error (Chunk):', error);
+        }
     }
+
+    // Optional: Handle receipts logic here if needed (omitted for simplicity)
+    console.log(`Sent ${messages.length} notifications.`);
 };
 
 /**
  * Send Single Push Notification
  */
 exports.sendPush = async (token, title, body, data = {}) => {
-    if (!token || (!token.startsWith('ExponentPushToken') && !token.startsWith('ExpoPushToken'))) return;
-
-    const message = {
-        to: token,
-        sound: 'default',
-        title,
-        body,
-        data,
-    };
-
-    try {
-        await sendToExpo(message);
-    } catch (error) {
-        console.error('Expo Push Single Error:', error);
-    }
+    if (!token || !Expo.isExpoPushToken(token)) return;
+    await exports.sendPushList([token], title, body, data);
 };
-
-// Internal Helper using HTTPS
-function sendToExpo(message) {
-    return new Promise((resolve, reject) => {
-        const data = JSON.stringify(message);
-
-        const options = {
-            hostname: 'exp.host',
-            path: '/--/api/v2/push/send',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Accept-Encoding': 'gzip, deflate',
-                'Content-Length': data.length,
-            },
-        };
-
-        const req = https.request(options, (res) => {
-            let responseBody = '';
-            res.on('data', (chunk) => { responseBody += chunk; });
-            res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    resolve(JSON.parse(responseBody));
-                } else {
-                    reject(new Error(`Expo API Status ${res.statusCode}: ${responseBody}`));
-                }
-            });
-        });
-
-        req.on('error', (e) => {
-            reject(e);
-        });
-
-        req.write(data);
-        req.end();
-    });
-}

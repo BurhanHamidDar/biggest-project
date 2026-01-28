@@ -97,6 +97,24 @@ exports.recordPayment = async (req, res) => {
             .single();
 
         if (insertError) throw insertError;
+
+        // NOTIFICATION TRIGGER
+        try {
+            const { data: tokens } = await supabase.from('push_tokens').select('token').eq('user_id', student_id);
+            if (tokens && tokens.length > 0) {
+                const tokenList = tokens.map(t => t.token);
+                const { sendPushList } = require('../utils/expoPush');
+                await sendPushList(
+                    tokenList,
+                    'Fee Payment Received ✅',
+                    `Payment of ₹${amount_paid} for ${structure?.fee_types?.name || 'School Fee'} received.`,
+                    { type: 'payment_success', payment_id: payment.id }
+                );
+            }
+        } catch (notifError) {
+            console.error('Notification Error (Payment):', notifError);
+        }
+
         res.json(payment);
 
     } catch (error) { res.status(500).json({ error: error.message }); }

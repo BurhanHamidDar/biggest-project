@@ -201,6 +201,32 @@ exports.enterMarks = async (req, res) => {
             .select();
 
         if (error) throw error;
+
+        // NOTIFICATION TRIGGER
+        try {
+            // Get Subject Name for context
+            const { data: sub } = await supabase.from('exam_subjects').select('subjects(name)').eq('id', exam_subject_id).single();
+            const subjectName = sub?.subjects?.name || 'Class Test';
+
+            const studentIds = marks_data.map(m => m.student_id);
+            // Batch fetch tokens
+            const { data: tokens } = await supabase.from('push_tokens').select('token').in('user_id', studentIds);
+
+            if (tokens && tokens.length > 0) {
+                const tokenList = tokens.map(t => t.token);
+                const { sendPushList } = require('../utils/expoPush');
+
+                await sendPushList(
+                    tokenList,
+                    'New Marks Added 📝',
+                    `Your marks for ${subjectName} have been updated.`,
+                    { type: 'marks_update', exam_subject_id }
+                );
+            }
+        } catch (notifError) {
+            console.error('Notification Error (Marks):', notifError);
+        }
+
         res.json({ message: 'Marks saved successfully', count: data.length });
 
     } catch (error) {
