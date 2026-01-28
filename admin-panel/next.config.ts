@@ -5,7 +5,6 @@ const nextConfig: NextConfig = {
   sassOptions: {
     includePaths: [path.join(process.cwd(), 'node_modules')],
   },
-  output: 'export',
   images: {
     unoptimized: true,
   },

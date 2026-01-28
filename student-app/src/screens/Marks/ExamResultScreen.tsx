@@ -133,15 +133,39 @@ export default function ExamResultScreen({ route, navigation }: any) {
         }
     };
 
+
+    const getLogoBase64 = async () => {
+        try {
+            const asset = Asset.fromModule(require('../../../assets/school_logo.png'));
+            const folder = `${FileSystem.cacheDirectory}assets/`;
+            const dirInfo = await FileSystem.getInfoAsync(folder);
+            if (!dirInfo.exists) {
+                await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
+            }
+            const localUri = `${folder}school_logo.png`;
+            if (asset.localUri) {
+                await FileSystem.copyAsync({ from: asset.localUri, to: localUri });
+            } else {
+                await asset.downloadAsync();
+                if (asset.localUri) {
+                    await FileSystem.copyAsync({ from: asset.localUri, to: localUri });
+                }
+            }
+            const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
+            return `data:image/png;base64,${base64}`;
+        } catch (e) {
+            console.error("Logo load failed", e);
+            return null;
+        }
+    };
+
     const handleDownloadPDF = async () => {
         try {
             setLoading(true);
 
             // 1. Prepare Logo
-            const asset = Asset.fromModule(require('../../../assets/school_logo.png'));
-            await asset.downloadAsync();
-            const logoBase64 = await FileSystem.readAsStringAsync(asset.localUri!, { encoding: 'base64' });
-            const logoSrc = `data:image/png;base64,${logoBase64}`;
+            const logoSrc = await getLogoBase64() || ''; // Fallback to empty string if failed
+
 
             // 2. Generate HTML
             const html = `
@@ -183,9 +207,9 @@ export default function ExamResultScreen({ route, navigation }: any) {
                 </style>
                 </head>
                 <body>
-                <div class="header">
-                    <img src="${logoSrc}" class="logo" />
-                    <div class="school-info">
+                    <div class="header">
+                        ${logoSrc ? `<img src="${logoSrc}" class="logo" />` : '<div style="height:80px; width:80px;"></div>'}
+                        <div class="school-info">
                     <h1 class="school-name">Ayesha Ali Academy</h1>
                     <p class="tagline">Above and Ahead</p>
                     <p class="address">Kanipora Kulgam, J&K - 192231</p>

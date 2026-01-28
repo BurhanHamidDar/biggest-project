@@ -29,6 +29,19 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
                 // Not logged in and not on login page
                 router.replace('/login');
             } else {
+                // Verify Role for Session Persistence
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (profile?.role !== 'admin' && profile?.role !== 'super_admin') {
+                    await supabase.auth.signOut();
+                    router.replace('/login');
+                    return;
+                }
+
                 setAuthenticated(true);
             }
             setLoading(false);

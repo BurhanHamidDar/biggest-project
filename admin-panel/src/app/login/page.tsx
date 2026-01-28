@@ -25,9 +25,18 @@ export default function LoginPage() {
             if (error) throw error;
 
             if (data.user) {
-                // Verify Role (Optional but recommended)
-                // const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
-                // if (profile?.role !== 'admin') { ... }
+                // Verify Role
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', data.user.id)
+                    .single();
+
+                if (profile?.role !== 'admin' && profile?.role !== 'super_admin') {
+                    await supabase.auth.signOut();
+                    setError('Access Denied. Please login in the Teachers/Student app.');
+                    return;
+                }
 
                 router.push('/'); // Redirect to Dashboard
             }

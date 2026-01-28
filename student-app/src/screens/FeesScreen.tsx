@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { theme } from '../theme';
-import { CheckCircle, Clock, AlertTriangle, Lock, Unlock, TrendingUp, DollarSign, Share2 } from 'lucide-react-native';
+import { CheckCircle, Clock, AlertTriangle, Lock, Unlock, TrendingUp, DollarSign, Share2, FileText } from 'lucide-react-native';
 import { format } from 'date-fns';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -19,6 +19,17 @@ export default function FeesScreen() {
     const [feeRecords, setFeeRecords] = useState<any[]>([]);
     const [classDetails, setClassDetails] = useState({ className: '', sectionName: '' });
     const [filter, setFilter] = useState('ALL'); // ALL, PAID, PENDING
+    const [logoBase64, setLogoBase64] = useState<string | null>(null);
+
+    // Preload logo on mount
+    useEffect(() => {
+        loadLogoOnce();
+    }, []);
+
+    const loadLogoOnce = async () => {
+        const base64 = await getLogoBase64();
+        if (base64) setLogoBase64(base64);
+    };
 
     const fetchFees = async () => {
         if (!studentData?.class_id || !studentData?.profile_id) {
@@ -27,8 +38,7 @@ export default function FeesScreen() {
         }
 
         try {
-            // 1. Fetch Class Fee Structures (What needs to be paid)
-            // 1. Fetch Class Fee Structures (What needs to be paid)
+            // 1. Fetch Class Fee Structures
             const { data: structures, error: structError } = await supabase
                 .from('class_fee_structures')
                 .select(`
@@ -59,7 +69,7 @@ export default function FeesScreen() {
                 sectionName: sectionData?.name || 'A'
             });
 
-            // 2. Fetch Student Payments (What has been paid)
+            // 2. Fetch Student Payments
             const { data: payments, error: payError } = await supabase
                 .from('student_fee_payments')
                 .select('*')
@@ -85,16 +95,13 @@ export default function FeesScreen() {
                     title: struct.fee_types?.name || 'Fee',
                     amount: struct.amount,
                     paid: paidAmount,
-                    status: isPaid ? 'PAID' : 'UNPAID', // Simple binary for now, can be PARTIAL
+                    status: isPaid ? 'PAID' : 'UNPAID',
                     dueDate: struct.due_date,
                     paymentDate: payment?.payment_date,
                     transactionId: payment?.transaction_id,
-                    markedBy: payment ? 'HR Admin' : '-', // Placeholder as per requirements
+                    markedBy: payment ? 'HR Admin' : '-',
                 });
             });
-
-            // Handle Extra Payments (if any, separate from structure?)
-            // For now, assuming strict structure mapping.
 
             setStats({
                 total: totalDue,
@@ -117,17 +124,60 @@ export default function FeesScreen() {
         fetchFees();
     }, [studentData]);
 
-    const generateReceiptPDF = async (record: any) => {
+    const getLogoBase64 = async () => {
+        try {
+            // Safe asset loading for standalone apps
+            const asset = Asset.fromModule(require('../../assets/school_logo.png'));
+            await asset.downloadAsync(); // Ensure it's downloaded
+
+            if (!asset.localUri) {
+                console.log("No local URI for asset");
+                return null;
+            }
+
+            const folder = `${FileSystem.cacheDirectory}assets/`;
+            const dirInfo = await FileSystem.getInfoAsync(folder);
+            if (!dirInfo.exists) {
+                await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
+            }
+
+            const localUri = `${folder}school_logo.png`;
+
+            // Check if file already exists to avoid redundant copy
+            const fileInfo = await FileSystem.getInfoAsync(localUri);
+            if (!fileInfo.exists) {
+                await FileSystem.copyAsync({ from: asset.localUri, to: localUri });
+            }
+
+            const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
+            return `data:image/png;base64,${base64}`;
+        } catch (e) {
+            console.error("Logo load failed", e);
+            return null; // Fallback to no logo
+        }
+    };
+
+    const generatePDF = async (items: any[], isStatement = false) => {
         try {
             setLoading(true);
+            const logoSrc = logoBase64 || await getLogoBase64(); // Use state or fetch
+            const logoHtml = logoSrc ? `<img src="${logoSrc}" class="logo" />` : '<div style="height:60px;"></div>';
 
-            // 1. Prepare Logo
-            const asset = Asset.fromModule(require('../../assets/school_logo.png'));
-            await asset.downloadAsync();
-            const logoBase64 = await FileSystem.readAsStringAsync(asset.localUri!, { encoding: 'base64' });
-            const logoSrc = `data:image/png;base64,${logoBase64}`;
+            const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+            const totalPaid = items.reduce((sum, item) => sum + item.paid, 0);
+            const totalPending = Math.max(0, totalAmount - totalPaid);
 
-            // 2. Generate HTML
+            const rowsHtml = items.map(item => `
+                <tr>
+                    <td>${item.title}</td>
+                    <td style="text-align: right;">Rs.${item.amount}</td>
+                    <td style="text-align: right;">${item.status}</td>
+                </tr>
+            `).join('');
+
+            const title = isStatement ? 'FEE STATEMENT' : 'FEE RECEIPT';
+            const dateStr = format(new Date(), 'dd MMM yyyy');
+
             const html = `
             <html>
                 <head>
@@ -157,53 +207,59 @@ export default function FeesScreen() {
                     .sig-box { text-align: center; }
                     .sig-line { border-bottom: 1px solid #000; width: 120px; margin-bottom: 5px; }
                     .sig-text { font-size: 10px; font-weight: bold; }
-
-                    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 80px; color: rgba(0,0,0,0.03); font-weight: bold; z-index: -1; white-space: nowrap; }
                 </style>
                 </head>
                 <body>
                 <div class="container">
-                    <div class="watermark">PAID</div>
-                    
                     <div class="header">
-                        <img src="${logoSrc}" class="logo" />
+                        ${logoHtml}
                         <h1 class="school-name">Ayesha Ali Academy</h1>
                         <p class="tagline">Above and Ahead</p>
                         <p class="address">Kanipora Kulgam, J&K - 192231</p>
                     </div>
 
-                    <div class="receipt-title">FEE RECEIPT</div>
+                    <div class="receipt-title">${title}</div>
 
                     <div class="details-grid">
-                        <div class="detail-item"><span class="label">Receipt No</span><span class="value">#${record.transactionId || 'N/A'}</span></div>
-                        <div class="detail-item"><span class="label">Date</span><span class="value">${record.paymentDate ? format(new Date(record.paymentDate), 'dd MMM yyyy') : '-'}</span></div>
+                        <div class="detail-item"><span class="label">Date</span><span class="value">${dateStr}</span></div>
                         <div class="detail-item"><span class="label">Student Name</span><span class="value">${profile?.full_name?.toUpperCase()}</span></div>
                         <div class="detail-item"><span class="label">Class</span><span class="value">${classDetails.className} / Section ${classDetails.sectionName}</span></div>
                         <div class="detail-item"><span class="label">Admission No</span><span class="value">${studentData?.admission_no}</span></div>
-                        <div class="detail-item"><span class="label">Parents Name</span><span class="value">${studentData?.parent_name || '-'}</span></div>
+                        <div class="detail-item"><span class="label">Parent Name</span><span class="value">${studentData?.parent_name || '-'}</span></div>
                     </div>
 
                     <table class="payment-table">
                         <thead>
                             <tr>
-                                <th>Fee Description</th>
+                                <th>Description</th>
                                 <th style="text-align: right;">Amount</th>
+                                <th style="text-align: right;">Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr>
-                                <td>${record.title}</td>
-                                <td style="text-align: right;">₹${record.amount}</td>
+                            ${rowsHtml}
+                            <tr class="total-row">
+                                <td>Total Fees</td>
+                                <td style="text-align: right;">Rs.${totalAmount}</td>
+                                <td></td>
                             </tr>
                             <tr class="total-row">
                                 <td>Total Paid</td>
-                                <td style="text-align: right;">₹${record.amount}</td>
+                                <td style="text-align: right;">Rs.${totalPaid}</td>
+                                <td></td>
                             </tr>
+                            ${isStatement ? `
+                            <tr class="total-row" style="color: #b91c1c;">
+                                <td>Pending Due</td>
+                                <td style="text-align: right;">Rs.${totalPending}</td>
+                                <td></td>
+                            </tr>
+                            ` : ''}
                         </tbody>
                     </table>
 
                     <div style="font-size: 10px; font-style: italic; color: #64748b; margin-bottom: 20px;">
-                        Payment Mode: Online / Cash | Status: ${record.status}
+                        This is a computer-generated document.
                     </div>
 
                     <div class="footer">
@@ -222,13 +278,22 @@ export default function FeesScreen() {
             `;
 
             const { uri } = await Print.printToFileAsync({ html, base64: false });
-            await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+            // Added dialogTitle for Android
+            await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf', dialogTitle: 'Share Receipt' });
 
         } catch (error: any) {
-            Alert.alert('Error', 'Failed to generate receipt: ' + error.message);
+            Alert.alert('Error', 'Failed to generate PDF: ' + error.message);
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleSingleReceipt = (record: any) => {
+        generatePDF([record], false);
+    };
+
+    const handleFullStatement = () => {
+        generatePDF(feeRecords, true);
     };
 
     const onRefresh = useCallback(() => {
@@ -242,20 +307,18 @@ export default function FeesScreen() {
     });
 
     const formatCurrency = (amount: number) => {
-        return `₹${amount.toLocaleString('en-IN')}`;
+        return `Rs.${amount.toLocaleString('en-IN')}`;
     };
-
-    if (loading) {
-        return (
-            <View style={styles.center}>
-                <ActivityIndicator size="large" color={theme.colors.primary} />
-            </View>
-        );
-    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+
+            {loading && (
+                <View style={[StyleSheet.absoluteFill, styles.loadingOverlay]}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            )}
 
             <ScrollView
                 contentContainerStyle={styles.content}
@@ -272,15 +335,21 @@ export default function FeesScreen() {
                     </View>
 
                     <View style={styles.balanceRow}>
-                        <View>
+                        <View style={{ flex: 1, marginRight: 8 }}>
                             <Text style={styles.balanceLabel}>Total Pending</Text>
-                            <Text style={styles.balanceAmount}>{formatCurrency(stats.pending)}</Text>
+                            <Text style={styles.balanceAmount} adjustsFontSizeToFit numberOfLines={1}>{formatCurrency(stats.pending)}</Text>
                         </View>
-                        <View style={{ alignItems: 'flex-end' }}>
+                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
                             <Text style={styles.balanceLabel}>Total Paid</Text>
-                            <Text style={[styles.balanceAmount, { opacity: 0.8 }]}>{formatCurrency(stats.paid)}</Text>
+                            <Text style={[styles.balanceAmount, { opacity: 0.8 }]} adjustsFontSizeToFit numberOfLines={1}>{formatCurrency(stats.paid)}</Text>
                         </View>
                     </View>
+
+                    {/* Statement Download Button */}
+                    <TouchableOpacity style={styles.statementBtn} onPress={handleFullStatement}>
+                        <FileText size={16} color="#0f172a" />
+                        <Text style={styles.statementBtnText}>Download Full Statement</Text>
+                    </TouchableOpacity>
 
                     <View style={styles.lockStatus}>
                         {stats.status === 'CLEARED' ? (
@@ -346,7 +415,7 @@ export default function FeesScreen() {
                                         <Text style={styles.paidDateText}>Paid on {item.paymentDate ? format(new Date(item.paymentDate), 'MMM dd, yyyy') : 'Unknown'}</Text>
                                     </View>
 
-                                    <TouchableOpacity style={styles.receiptBtn} onPress={() => generateReceiptPDF(item)}>
+                                    <TouchableOpacity style={styles.receiptBtn} onPress={() => handleSingleReceipt(item)}>
                                         <Share2 size={16} color="#fff" />
                                         <Text style={styles.receiptBtnText}>Share Receipt</Text>
                                     </TouchableOpacity>
@@ -370,6 +439,7 @@ export default function FeesScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f1f5f9' },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingOverlay: { backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
     content: { padding: 16, paddingBottom: 40 },
 
     // Header
@@ -391,7 +461,10 @@ const styles = StyleSheet.create({
 
     balanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 },
     balanceLabel: { color: '#94a3b8', fontSize: 12, marginBottom: 4 },
-    balanceAmount: { color: '#fff', fontSize: 32, fontWeight: '800' },
+    balanceAmount: { color: '#fff', fontSize: 24, fontWeight: '800' },
+
+    statementBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', padding: 10, borderRadius: 8, marginBottom: 16, gap: 8 },
+    statementBtnText: { color: '#0f172a', fontWeight: 'bold', fontSize: 13 },
 
     lockStatus: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 8, justifyContent: 'center' },
     lockRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

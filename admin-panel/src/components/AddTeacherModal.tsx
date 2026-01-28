@@ -21,7 +21,6 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ show, handleClose, on
         joining_date: '',
         qualification: '',
         department: '',
-        department: '',
         dob: '',
         avatar_url: ''
     });
