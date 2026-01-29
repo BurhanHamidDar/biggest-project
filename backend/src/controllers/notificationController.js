@@ -7,7 +7,13 @@ exports.registerToken = async (req, res) => {
         const user_id = req.user.id;
         const { token, device_name } = req.body;
 
-        if (!token) return res.status(400).json({ error: 'Token is required' });
+        console.log(`[Notification] Register request from User: ${user_id}`);
+        console.log(`[Notification] Payload:`, JSON.stringify(req.body));
+
+        if (!token) {
+            console.error('[Notification] Registration Failed: Missing Token');
+            return res.status(400).json({ error: 'Token is required' });
+        }
 
         // Upsert Token
         const { data, error } = await supabase
