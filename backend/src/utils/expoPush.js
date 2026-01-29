@@ -38,13 +38,21 @@ exports.sendPushList = async (tokens, title, body, data = {}) => {
         try {
             const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
             tickets.push(...ticketChunk);
+
+            // Log errors from Expo (e.g. DeviceNotRegistered)
+            ticketChunk.forEach((ticket) => {
+                if (ticket.status === 'error') {
+                    console.error('Expo Push Ticket Error:', ticket.message, ticket.details);
+                }
+            });
+
         } catch (error) {
             console.error('Expo Push Error (Chunk):', error);
         }
     }
 
     // Optional: Handle receipts logic here if needed (omitted for simplicity)
-    console.log(`Sent ${messages.length} notifications.`);
+    console.log(`Attempted to send ${messages.length} notifications. Processed ${tickets.length} tickets.`);
 };
 
 /**

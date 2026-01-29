@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "student-app",
+    "name": "AAA Student",
     "slug": "student-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.burhanhamid.studentapp"
     },
     "splash": {
       "image": "./assets/splash.png",
@@ -19,6 +20,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c8957c89-4313-469a-a835-54f8b1307bdc"
+      }
+    },
+    "owner": "burhanhamid"
   }
 }

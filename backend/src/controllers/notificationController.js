@@ -22,6 +22,7 @@ exports.registerToken = async (req, res) => {
             .single();
 
         if (error) throw error;
+        console.log(`[Notification] Token registered for User ${user_id}: ${token.substring(0, 20)}...`);
         res.json({ message: 'Token registered', data });
 
     } catch (error) {

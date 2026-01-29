@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "teacher-app",
-    "slug": "teacher-app",
+    "name": "AAA Teacher",
+    "slug": "aaa-teacher",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.burhanhamid.aaateacher"
     },
     "web": {
       "output": "static",
@@ -48,9 +49,11 @@
       "reactCompiler": true
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "dd764273-000c-4e44-b024-5d517c57f724"
+        "projectId": "db3053c9-b444-4e73-9a59-bf53db010bc2"
       }
-    }
+    },
+    "owner": "burhanhamid"
   }
 }
