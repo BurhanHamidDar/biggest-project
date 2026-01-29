@@ -12,32 +12,41 @@ exports.createNotice = async (req, res) => {
         // For now, let's assume empty target_role means everyone or specific logic updates.
         else if (audience === 'all') target_role = ['teacher', 'student'];
 
+        // Validate Importance
+        const validImportance = ['low', 'medium', 'high', 'urgent'];
+        let finalImportance = importance || 'low';
+        if (finalImportance === 'normal') finalImportance = 'medium'; // Fix for Admin Panel sending 'normal'
+        if (!validImportance.includes(finalImportance)) finalImportance = 'low';
+
         const { data, error } = await supabase
             .from('notices')
-            .insert([{ title, content, target_role, importance: importance || 'low' }])
+            .insert([{ title, content, target_role, importance: finalImportance }])
             .select();
 
         if (error) throw error;
 
         // NOTIFICATION TRIGGER
         try {
+            console.log(`[Notification] Checking settings for Notice ID: ${data[0].id}`);
             const { data: settings } = await supabase.from('system_settings').select('notifications_notices').single();
+
             if (!settings || settings.notifications_notices !== false) {
                 // Determine Target User IDs
-                // target_role is array: ['student'], ['teacher'], or both.
-                let query = supabase.from('profiles').select('id');
+                let query = supabase.from('profiles').select('id, role');
 
                 // If specific target roles
                 if (target_role && target_role.length > 0) {
                     query = query.in('role', target_role);
                 }
-                // If empty, maybe no one? Or everyone? Assuming target_role is required.
 
                 const { data: users } = await query;
+                console.log(`[Notification] Found ${users ? users.length : 0} target users for roles: ${target_role}`);
 
                 if (users && users.length > 0) {
                     const userIds = users.map(u => u.id);
                     const { data: tokens } = await supabase.from('push_tokens').select('token').in('user_id', userIds);
+
+                    console.log(`[Notification] Found ${tokens ? tokens.length : 0} push tokens.`);
 
                     if (tokens && tokens.length > 0) {
                         const tokenList = tokens.map(t => t.token);
@@ -45,6 +54,8 @@ exports.createNotice = async (req, res) => {
                         await sendPushList(tokenList, `Notice: ${title} 📢`, 'Tap to view new notice.', { notice_id: data[0].id });
                     }
                 }
+            } else {
+                console.log('[Notification] Notice notifications are DISABLED in settings.');
             }
         } catch (notifError) {
             console.error('Notification Error (Notice):', notifError);
