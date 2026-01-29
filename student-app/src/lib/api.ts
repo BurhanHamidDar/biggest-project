@@ -2,7 +2,7 @@ import axios from 'axios';
 import { supabase } from './supabase';
 
 const api = axios.create({
-    baseURL: process.env.EXPO_PUBLIC_API_URL,
+    baseURL: 'https://biggest-project-1.onrender.com/api',
     timeout: 10000,
     headers: {
         'Content-Type': 'application/json',

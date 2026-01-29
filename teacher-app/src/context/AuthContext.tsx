@@ -123,6 +123,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (session) {
                 setUser(session.user);
                 fetchProfile(session.user.id);
+                registerPushToken();
             } else {
                 setLoading(false); // No session, stop loading
             }
@@ -221,10 +222,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     }, {
                         headers: { Authorization: `Bearer ${session.access_token}` }
                     });
+                    // DEBUG ALERT
+                    // alert('Push Token Registered!'); 
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.log('Push Register Error:', error);
+            // alert('Push Error: ' + error.message);
         }
     };
 
